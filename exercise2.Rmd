@@ -1,0 +1,266 @@
+---
+title: "exercise2"
+author: "Valerie Arnaldi"
+date: "29 4 2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Load the necessary libraries ################################################
+```{r}
+library(readr)        # to import tabular data (e.g. csv)
+library(dplyr)        # to manipulate (tabular) data
+library(ggplot2)      # to visualize data
+library(sf)           # to handle spatial vector data
+library(terra)        # To handle raster data
+library(lubridate)    # To handle dates and times
+```
+## Task 1 #####################################################################
+
+## Import the downloaded csv ##################################################
+```{r}
+wildschwein_BE <- read_delim("wildschwein_BE_2056.csv",delim=",",locale=locale
+                             (encoding = "UTF-8"))
+
+wildschwein_BE <- st_as_sf(wildschwein_BE, coords = c("E", "N"), crs = 2056,
+                           remove = FALSE)
+```
+# dataset is already converted to EPSG 2056
+# coordinates are stored in the columns (E/N)
+# setting remove = FALSE preserves the original (E/N) columns
+
+
+## Task 2 #####################################################################
+
+## Getting an overview ########################################################
+
+# Calculate the time difference between subsequent rows
+
+```{r}
+wildschwein <- mutate(wildschwein_BE,timelag = as.integer(difftime(lead(DatetimeUTC),DatetimeUTC, units = "sec")))
+
+wildschwein
+```
+# How many individuals were tracked?
+```{r}
+individuals <- wildschwein %>% group_by(TierName) %>%
+  summarize(count=n())
+nrow(individuals)
+```
+# 3 individuals were tracked
+
+# For how long were the individual tracked? Are there gaps?
+```{r}
+ggplot(wildschwein_BE, aes(DatetimeUTC,TierName))+
+  geom_line()
+```
+# Sabi from mid 2014 until mid 2015
+# Ruth from end 2014 until mid 2015
+# Rosa from end 2014 until july 2015
+# without gaps
+
+# Were all individuals tracked concurrently or sequentially?
+```{r}
+ggplot(wildschwein, aes(timelag))+
+  geom_bar()+
+  scale_y_log10()+
+  scale_x_continuous(limits = c(0,15000))
+```
+# muessen wir da etwas mit den NA Werten machen?
+
+# What is the temporal sampling interval between the locations?
+```{r}
+ggplot(wildschwein, aes(DatetimeUTC,timelag, color=TierID))+
+  geom_line()+
+  geom_point()+
+  scale_x_datetime(date_breaks="1 month", date_labels="%b")+
+  scale_y_continuous(limits = c(0,20000))
+```
+# nur fuer Zeit Sept bis Jan auswaehlen
+
+## Task 3 #####################################################################
+
+## Deriving movement parameters I: Speed ######################################
+
+# calculate the animal’s steplength based on the Euclidean distance between two
+# subsequent locations
+```{r}
+wildschwein <- wildschwein %>%
+  mutate(steplength = sqrt((E-lead(E,1))^2+(N-lead(N,1))^2)
+  )
+```
+# in welcher Einheit wird die Schrittlaenge ausgegeben?
+
+# Calculate the animals speed between consecutive locations based on steplength and timelag
+```{r}
+wildschwein <- wildschwein %>%
+  mutate(speed = steplength / timelag)
+```
+# Einheit kommt darauf an, was die Ausgabe der Schrittlaenge ist. Das andere sind Sekunden (vgl. timelag)
+
+## Task 4 #####################################################################
+
+## Cross-scale movement analysis #############################################
+
+# analyse animal movement across different scales
+# reducing the granularity of the data by subsetting the data to every nth element
+# 200 locations of a single wild boar with a constant sampling interval of 60 seconds
+
+# import Data
+```{r}
+caro <- read_delim("caro60.csv",delim=",")
+
+caro <- st_as_sf(caro, coords = c("E", "N"), crs = 2056, remove = FALSE)
+```
+# the locations are stored in EPSG 2056
+
+# reduce granularity
+```{r}
+caro_3 <- caro %>%
+  slice(seq(from = 1, to = 200, by = 3))  #'slice' nimmt Anzahl Zeilen heraus, 'seq' gibt ihm die Wiederholung aller drei Zeilen
+  
+caro_6 <- caro %>%
+  slice(seq(from = 1, to = 200, by = 6))
+
+caro_9 <- caro %>%
+  slice(seq(from = 1, to = 200, by = 9))
+```
+# control
+```{r}
+nrow(caro) #200
+nrow(caro_3) #67
+nrow(caro_6) #34
+nrow(caro_9) #23
+```
+# calculate timelag, steplength, speed for each data set
+
+# timelag
+```{r}
+caro <- mutate(caro, timelag = as.integer(difftime(lead(DatetimeUTC),DatetimeUTC, units = "sec")))
+
+caro_3 <- mutate(caro_3, timelag = as.integer(difftime(lead(DatetimeUTC),DatetimeUTC, units = "sec")))
+
+caro_6 <- mutate(caro_6, timelag = as.integer(difftime(lead(DatetimeUTC),DatetimeUTC, units = "sec")))
+
+caro_9 <- mutate(caro_9, timelag = as.integer(difftime(lead(DatetimeUTC),DatetimeUTC, units = "sec")))
+```
+# steplength
+```{r}
+caro <- caro %>%
+  mutate(steplength = sqrt((E-lead(E,1))^2+(N-lead(N,1))^2)
+  )
+
+caro_3 <- caro_3 %>%
+  mutate(steplength = sqrt((E-lead(E,1))^2+(N-lead(N,1))^2)
+  )
+
+caro_6 <- caro_6 %>%
+  mutate(steplength = sqrt((E-lead(E,1))^2+(N-lead(N,1))^2)
+  )
+
+caro_9 <- caro_9 %>%
+  mutate(steplength = sqrt((E-lead(E,1))^2+(N-lead(N,1))^2)
+  )
+```
+# speed
+```{r}
+caro <- caro %>%
+  mutate(speed = steplength / timelag)
+
+caro_3 <- caro_3 %>%
+  mutate(speed = steplength / timelag)
+
+caro_6 <- caro_6 %>%
+  mutate(speed = steplength / timelag)
+
+caro_9 <- caro_9 %>%
+  mutate(speed = steplength / timelag)
+```
+# visualize the trajectories in a map
+```{r}
+ggplot()+
+  geom_path(caro, mapping=aes(E,N, color="1 minute"))+
+  geom_point(caro, mapping=aes(E,N, color="1 minute"))+
+  geom_path(caro_3, mapping=aes(E,N, color="3 minute"))+
+  geom_point(caro_3, mapping=aes(E,N, color="3 minute"))+
+  labs(title="Comparing original with 3-minute-resampling",
+       color="Trajectory")
+
+ggplot()+
+  geom_path(caro, mapping=aes(E,N, color="1 minute"))+
+  geom_point(caro, mapping=aes(E,N, color="1 minute"))+
+  geom_path(caro_6, mapping=aes(E,N, color="6 minute"))+
+  geom_point(caro_6, mapping=aes(E,N, color="6 minute"))+
+  labs(title="Comparing original with 6-minute-resampling",
+       color="Trajectory")
+
+ggplot()+
+  geom_path(caro, mapping=aes(E,N, color="1 minute"))+
+  geom_point(caro, mapping=aes(E,N, color="1 minute"))+
+  geom_path(caro_9, mapping=aes(E,N, color="9 minute"))+
+  geom_point(caro_9, mapping=aes(E,N, color="9 minute"))+
+  labs(title="Comparing original with 9-minute-resampling",
+       color="Trajectory")
+```
+# Comparing derived speed at different sampling intervals
+```{r}
+ggplot()+
+  geom_line(caro, mapping=aes(DatetimeUTC,speed, color="1 minute"))+
+  geom_line(caro_3, mapping=aes(DatetimeUTC,speed, color="3 minutes"))+
+  geom_line(caro_6, mapping=aes(DatetimeUTC,speed, color="6 minutes"))+
+  geom_line(caro_9, mapping=aes(DatetimeUTC,speed, color="9 minutes"))+
+  labs(title="Comparing derived speed at different sampling intervals",
+       color="Interval",
+       x="Time",
+       y="speed (m/s)")
+```
+
+## Task 5 #####################################################################
+
+## Deriving movement parameters II: Rolling window functions ##################
+
+```{r}
+install.packages("roll_*")
+library(zoo)
+```
+# example
+```{r}
+example <- rnorm(10)
+
+rollmean(example,k = 3,fill = NA,align = "left")
+
+rollmean(example,k = 4,fill = NA,align = "left")
+```
+# run rollmean on the speed variable of the subset (caro)
+```{r}
+rollmean(caro$speed,k = 3,fill = NA,align = "left")
+rollmean(caro_3$speed,k = 3,fill = NA,align = "left")
+rollmean(caro_6$speed,k = 3,fill = NA,align = "left")
+rollmean(caro_9$speed,k = 3,fill = NA,align = "left")
+```
+# visualize with different window sizes
+```{r}
+caro <- caro %>%
+  mutate(rollmean3 = rollmean(caro$speed,k = 3,fill = NA,align = "left"))
+
+caro <- caro %>%
+  mutate(rollmean5 = rollmean(caro$speed,k = 5,fill = NA,align = "left"))
+
+caro <- caro %>%
+  mutate(rollmean8 = rollmean(caro$speed,k = 8,fill = NA,align = "left"))
+
+ggplot()+
+  geom_line(caro, mapping=aes(x=DatetimeUTC, y=rollmean3, color="k=3"))+
+  geom_line(caro, mapping=aes(x=DatetimeUTC, y=rollmean5, color="k=5"))+
+  geom_line(caro, mapping=aes(x=DatetimeUTC, y=rollmean8, color="k=8"))+
+  labs(title="Comparing derived speed by rolling window functons",
+       color="Window Sizes",
+       x="Time",
+       y="speed (m/s)")
+```
+
+
+
